@@ -1,0 +1,136 @@
+name: build
+
+on:
+  push:
+    branches: [main, dev]
+
+permissions: write-all
+
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Test Code
+    uses: zugazagoitia/actions-templates/.github/workflows/gradle-test.yml@656937c556cf305effd966314a7bc7ffda9b87eb
+    with:
+      java-version: '17'
+      gradle-version: '7.4'
+      upload-codecov: true
+
+  build:
+    needs: test
+    name: Build Gradle Jar
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ env.RELEASE_VERSION }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3.3.0
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Generate version
+        uses: HardNorth/github-version-generate@v1.1.2
+        with:
+          version-source: file
+          version-file: build.gradle
+          version-file-extraction-pattern: '(?<=version\s*=\s*'')\S+(?='')'
+
+      - name: Output Version
+        id: genver
+        run: echo '::set-output name=version::${{ env.RELEASE_VERSION }}'
+
+      - name: Validate Wrapper
+        uses: gradle/wrapper-validation-action@v1
+
+      - name: Setup and Run Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '7.4'
+          arguments: bootJar
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: application ${{ env.RELEASE_VERSION }}
+          path: build/*.jar
+
+  prod-container:
+    needs: build
+    name: Build and Publish Production Container
+    environment: prod
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'main'
+    steps:
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2.0.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: application ${{ needs.build.outputs.version }}
+          path: build
+
+      - name: Build and Push Container
+        uses: docker/build-push-action@v3.0.0
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/zugazagoitia/knag-vault:latest
+            ghcr.io/zugazagoitia/knag-vault:${{ needs.build.outputs.version }}
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          body: |
+            Image published at `ghcr.io/zugazagoitia/knag-vault:${{ needs.build.outputs.version }}`
+          tag: ${{ needs.build.outputs.version }}
+          generateReleaseNotes: true
+          commit: main
+
+
+  env-container:
+    needs: build
+    name: Build and Publish Development Container
+    environment: dev
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'dev'
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2.0.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: application ${{ needs.build.outputs.version }}
+          path: build
+
+      - name: Build and Push Container
+        uses: docker/build-push-action@v3.0.0
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/zugazagoitia/knag-vault:${{ needs.build.outputs.version }}-${{ github.sha }}
