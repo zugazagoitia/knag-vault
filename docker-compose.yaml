@@ -1,0 +1,37 @@
+# Create Mariadb server with root password: mariadb
+services:
+  vault:
+    build: .
+    ports:
+      - "8080:8080"
+      - "3000:3000"
+    environment:
+      SPRING_DATASOURCE_HOST: vault-database
+      SPRING_DATASOURCE_PORT: 3306
+      SPRING_DATASOURCE_DATABASE: vault
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: debug
+
+      #X509
+      KNAG_KEY_PUB: |+
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6S7asUuzq5Q/3U9rbs+P
+        kDVIdjgmtgWreG5qWPsC9xXZKiMV1AiV9LXyqQsAYpCqEDM3XbfmZqGb48yLhb/X
+        qZaKgSYaC/h2DjM7lgrIQAp9902Rr8fUmLN2ivr5tnLxUUOnMOc2SQtr9dgzTONY
+        W5Zu3PwyvAWk5D6ueIUhLtYzpcB+etoNdL3Ir2746KIy/VUsDwAM7dhrqSK8U2xF
+        CGlau4ikOTtvzDownAMHMrfE7q1B6WZQDAQlBmxRQsyKln5DIsKv6xauNsHRgBAK
+        ctUxZG8M4QJIx3S6Aughd3RZC4Ca5Ae9fd8L8mlNYBCrQhOZ7dS0f4at4arlLcaj
+        twIDAQAB
+        -----END PUBLIC KEY-----
+
+  vault-database:
+    image: mariadb
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: vault
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
